@@ -13,13 +13,10 @@ import {
   Dimensions,
   DeviceEventEmitter,
   Platform,
-  NativeModules
+  NativeModules,
+  Text,
+  StatusBar
 } from 'react-native';
-
-const {
-  Magnetometer,
-  SensorManager
-} = require('NativeModules');
 
 type DailyConfig =  {
   morning: any,
@@ -45,6 +42,9 @@ const fillColors = {
 };
 
 class Compass extends React.Component {
+  currentAzimuth = 0;
+  interval = null;
+
   constructor(props) {
     super(props);
 
@@ -57,19 +57,36 @@ class Compass extends React.Component {
     NativeModules.CompassAndroid.startTracking();
 
     DeviceEventEmitter.addListener('azimuthChanged', this.azimuthChanged.bind(this));
+
+    /**
+     * We need this magic because we receive too much 'azimuthChanged' events so RN can't render it.
+     * Using interval we'll update our view each 1/10 second with current azimuth value.
+     */
+    this.interval = setInterval(() => {
+      this.setState({
+        azimuth: this.currentAzimuth
+      });
+    }, 100);
   }
 
   azimuthChanged(e: AzimuthEvent) {
-    console.log(e.newAzimuth);
-    this.setState({
-      azimuth: e.newAzimuth
-    });
+    this.currentAzimuth = e.newAzimuth;
   }
 
   componentWillUnmount() {
     NativeModules.CompassAndroid.stopTracking();
+
+    clearInterval(this.interval);
   }
 
+  /**
+   * Returns proper value for time of the day. If there's between 6 anf 11 o'clock
+   * this function will return `config.morning` value, if between 12 and 20 `config.afternoon`
+   * value will be returned. Or `config.night` object.
+   * @param config object with the following format {morning: ..., afternoon: ..., night: ...}
+   * @returns {*}
+   * @private
+   */
   _getDailyObject(config: DailyConfig): any {
     const currentHour = (new Date()).getHours();
 
@@ -77,7 +94,7 @@ class Compass extends React.Component {
       return config.morning;
     }
 
-    if (currentHour > 12 && currentHour < 20) {
+    if (currentHour >= 12 && currentHour < 20) {
       return config.afternoon;
     }
 
@@ -103,18 +120,23 @@ class Compass extends React.Component {
         colors={this.getCurrentGradientColors()}
         style={styles.container}
       >
-        <View style={{flex: 1}}>
+        <StatusBar
+          backgroundColor="transparent"
+          translucent={true}
+          />
 
+        <View style={styles.textContainer}>
+          <Text style={styles.text}>{Math.round(this.state.azimuth)} ˚ SE</Text>
         </View>
 
-        <View style={{flex: 5, alignItems: 'center', justifyContent: 'flex-start'}}>
+        <View style={styles.tableContainer}>
           <Image
             source={require('./img/table.png')}
-            style={[styles.table, {transform: [{ rotate: `${this.state.azimuth}deg`}]}]}
+            style={[styles.table]}
           >
             <Image
               source={require('./img/pointer.png')}
-              style={[styles.pointer]}
+              style={[styles.pointer, {transform: [{ rotate: `${-this.state.azimuth}deg`}]}]}
             />
           </Image>
         </View>
@@ -137,12 +159,28 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
   },
+  tableContainer: {
+    flex: 5,
+    alignItems: 'center',
+    justifyContent: 'flex-start'
+  },
   table: {
     alignItems: 'center',
     justifyContent: 'center'
   },
   pointer: {
 
+  },
+  textContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  text: {
+    fontSize: 20,
+    color: '#ffffff',
+    fontWeight: 'bold',
+    opacity: 0.7
   }
 });
 
