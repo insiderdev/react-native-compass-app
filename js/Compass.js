@@ -12,7 +12,8 @@ import {
   StyleSheet,
   Dimensions,
   DeviceEventEmitter,
-  Platform
+  Platform,
+  NativeModules
 } from 'react-native';
 
 const {
@@ -24,6 +25,10 @@ type DailyConfig =  {
   morning: any,
   afternoon: any,
   night: any
+};
+
+type AzimuthEvent = {
+  newAzimuth: Number
 };
 
 const gradientColors = {
@@ -40,24 +45,29 @@ const fillColors = {
 };
 
 class Compass extends React.Component {
-  componentDidMount() {
-    if (Platform.OS === 'android') {
-      SensorManager.startMagnetometer(600000);
-      DeviceEventEmitter.addListener('Magnetometer', function (data) {
-        const alpha = 0.97;
-        let mGeomagnetic = [0, 0, 0];
+  constructor(props) {
+    super(props);
 
-        mGeomagnetic[0] = alpha * mGeomagnetic[0] + (1 - alpha) * data.x;
-        mGeomagnetic[1] = alpha * mGeomagnetic[1] + (1 - alpha) * data.y;
-        mGeomagnetic[2] = alpha * mGeomagnetic[2] + (1 - alpha) * data.z;
-      });
+    this.state = {
+      azimuth: 0
     }
   }
 
+  componentDidMount() {
+    NativeModules.CompassAndroid.startTracking();
+
+    DeviceEventEmitter.addListener('azimuthChanged', this.azimuthChanged.bind(this));
+  }
+
+  azimuthChanged(e: AzimuthEvent) {
+    console.log(e.newAzimuth);
+    this.setState({
+      azimuth: e.newAzimuth
+    });
+  }
+
   componentWillUnmount() {
-    if (Platform.OS === 'android') {
-      SensorManager.stopMagnetometer();
-    }
+    NativeModules.CompassAndroid.stopTracking();
   }
 
   _getDailyObject(config: DailyConfig): any {
@@ -100,11 +110,11 @@ class Compass extends React.Component {
         <View style={{flex: 5, alignItems: 'center', justifyContent: 'flex-start'}}>
           <Image
             source={require('./img/table.png')}
-            style={styles.table}
+            style={[styles.table, {transform: [{ rotate: `${this.state.azimuth}deg`}]}]}
           >
             <Image
               source={require('./img/pointer.png')}
-              style={styles.pointer}
+              style={[styles.pointer]}
             />
           </Image>
         </View>
